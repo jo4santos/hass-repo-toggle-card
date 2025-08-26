@@ -3,6 +3,9 @@ class ToggleConfirmationCard extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this.showingConfirmation = false;
+    this.resetTimer = null;
+    this.timeRemaining = 0;
+    this.timerInterval = null;
   }
 
   setConfig(config) {
@@ -28,17 +31,50 @@ class ToggleConfirmationCard extends HTMLElement {
     const icon = this.config.icon || (entity ? entity.attributes.icon : 'mdi:help');
     const color = this.config.color || 'blue';
     const confirmationText = this.config.confirmation?.text || 'Are you sure?';
+    
+    // Calculate consistent card height
+    const cardHeight = this.config.height || '120px';
 
     if (this.showingConfirmation) {
       this.shadowRoot.innerHTML = `
         <style>
           .confirmation-container {
             display: flex;
-            height: 100%;
-            min-height: 100px;
+            flex-direction: column;
+            height: ${cardHeight};
             border-radius: var(--ha-card-border-radius, 12px);
+            border-width: var(--ha-card-border-width, 1px);
+            border-style: solid;
+            border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+            color: var(--primary-text-color);
+            transition: 0.3s ease-out;
+            position: relative;
             overflow: hidden;
-            box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,0.15));
+          }
+          
+          .confirmation-text {
+            background: var(--card-background-color, white);
+            padding: 16px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--primary-text-color);
+            border-bottom: 1px solid var(--divider-color, #e0e0e0);
+            flex-shrink: 0;
+          }
+          
+          .buttons-container {
+            display: flex;
+            flex: 1;
+          }
+          
+          .timer-display {
+            position: absolute;
+            bottom: 8px;
+            right: 12px;
+            font-size: 11px;
+            opacity: 0.6;
+            color: var(--secondary-text-color);
           }
           
           .confirm-button, .cancel-button {
@@ -53,7 +89,7 @@ class ToggleConfirmationCard extends HTMLElement {
             font-weight: 600;
             color: white;
             transition: all 0.2s ease;
-            padding: 20px;
+            padding: 12px;
             text-align: center;
             position: relative;
             overflow: hidden;
@@ -65,8 +101,7 @@ class ToggleConfirmationCard extends HTMLElement {
           
           .confirm-button:hover {
             background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+            transform: translateY(-1px);
           }
           
           .cancel-button {
@@ -75,8 +110,7 @@ class ToggleConfirmationCard extends HTMLElement {
           
           .cancel-button:hover {
             background: linear-gradient(135deg, #da190b 0%, #c1150a 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+            transform: translateY(-1px);
           }
           
           .button-icon {
@@ -111,14 +145,18 @@ class ToggleConfirmationCard extends HTMLElement {
         </style>
         
         <div class="confirmation-container">
-          <button class="cancel-button" @click="${this.handleCancel}">
-            <div class="button-icon">✕</div>
-            <div class="button-text">Cancelar</div>
-          </button>
-          <button class="confirm-button" @click="${this.handleConfirm}">
-            <div class="button-icon">✓</div>
-            <div class="button-text">Confirmar</div>
-          </button>
+          <div class="confirmation-text">${confirmationText}</div>
+          <div class="buttons-container">
+            <button class="cancel-button" @click="${this.handleCancel}">
+              <div class="button-icon">✕</div>
+              <div class="button-text">Cancelar</div>
+            </button>
+            <button class="confirm-button" @click="${this.handleConfirm}">
+              <div class="button-icon">✓</div>
+              <div class="button-text">Confirmar</div>
+            </button>
+          </div>
+          <div class="timer-display">${this.timeRemaining}s</div>
         </div>
       `;
     } else {
@@ -127,23 +165,25 @@ class ToggleConfirmationCard extends HTMLElement {
           .card {
             background: var(--card-background-color, white);
             border-radius: var(--ha-card-border-radius, 12px);
-            box-shadow: var(--ha-card-box-shadow, 0 2px 6px rgba(0,0,0,0.15));
+            border-width: var(--ha-card-border-width, 1px);
+            border-style: solid;
+            border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+            color: var(--primary-text-color);
             padding: 20px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            min-height: 100px;
+            transition: 0.3s ease-out;
+            height: ${cardHeight};
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
             position: relative;
-            overflow: hidden;
+            box-sizing: border-box;
           }
           
           .card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transform: translateY(-1px);
           }
           
           .card:active {
@@ -151,7 +191,7 @@ class ToggleConfirmationCard extends HTMLElement {
           }
           
           .icon {
-            font-size: 32px;
+            --mdc-icon-size: 32px;
             color: ${color === 'red' ? '#f44336' : color === 'green' ? '#4CAF50' : color};
             margin-bottom: 12px;
           }
@@ -187,7 +227,7 @@ class ToggleConfirmationCard extends HTMLElement {
         </style>
         
         <div class="card" @click="${this.handleCardClick}">
-          <div class="icon">${this.getIcon(icon)}</div>
+          <ha-icon class="icon" .icon="${icon}"></ha-icon>
           <div class="name">${name}</div>
           <div class="state">${entity ? entity.state : 'unavailable'}</div>
         </div>
@@ -218,17 +258,20 @@ class ToggleConfirmationCard extends HTMLElement {
   handleCardClick(e) {
     this.createRipple(e);
     this.showingConfirmation = true;
+    this.startResetTimer();
     this.render();
   }
 
   handleCancel(e) {
     this.createRipple(e);
+    this.clearResetTimer();
     this.showingConfirmation = false;
     this.render();
   }
 
   handleConfirm(e) {
     this.createRipple(e);
+    this.clearResetTimer();
     this.showingConfirmation = false;
     
     // Execute the toggle action
@@ -261,21 +304,44 @@ class ToggleConfirmationCard extends HTMLElement {
     }, 600);
   }
 
-  getIcon(iconName) {
-    // Simple icon mapping - could be expanded
-    const iconMap = {
-      'mdi:gate': '🚪',
-      'mdi:door': '🚪', 
-      'mdi:garage': '🏠',
-      'mdi:lock': '🔒',
-      'mdi:lightbulb': '💡',
-      'mdi:power': '⚡',
-      'mdi:toggle-switch': '🔘'
-    };
+  startResetTimer() {
+    this.timeRemaining = 10;
     
-    return iconMap[iconName] || '🔘';
+    this.resetTimer = setTimeout(() => {
+      this.showingConfirmation = false;
+      this.render();
+    }, 10000);
+    
+    this.timerInterval = setInterval(() => {
+      this.timeRemaining--;
+      if (this.timeRemaining <= 0) {
+        this.clearResetTimer();
+      } else {
+        // Update only the timer display
+        const timerDisplay = this.shadowRoot.querySelector('.timer-display');
+        if (timerDisplay) {
+          timerDisplay.textContent = `${this.timeRemaining}s`;
+        }
+      }
+    }, 1000);
+  }
+  
+  clearResetTimer() {
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
+    }
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+    this.timeRemaining = 0;
   }
 
+  disconnectedCallback() {
+    this.clearResetTimer();
+  }
+  
   getCardSize() {
     return 2;
   }
@@ -288,6 +354,7 @@ class ToggleConfirmationCard extends HTMLElement {
     return {
       entity: 'cover.portao_grande',
       name: 'Abrir / Fechar',
+      icon: 'mdi:garage',
       color: 'red',
       confirmation: {
         text: 'De certeza que quer ativar o portão GRANDE?'
