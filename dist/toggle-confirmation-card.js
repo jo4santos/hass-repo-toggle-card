@@ -92,21 +92,10 @@ class ToggleConfirmationCard extends HTMLElement {
           position: relative;
         }
         
-        .interaction-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          z-index: 999;
-          background: transparent;
-          cursor: pointer;
-        }
       </style>
       
       <div class="wrapper-container" id="wrapper-container">
         <div class="wrapped-card" id="wrapped-card"></div>
-        <div class="interaction-overlay" id="interaction-overlay"></div>
       </div>
     `;
     
@@ -118,8 +107,11 @@ class ToggleConfirmationCard extends HTMLElement {
         this.wrappedCardElement.hass = this._hass;
       }
       
-      // Allow card to have normal interactions, clicks will be caught by overlay
+      // Insert the card
       wrappedCardContainer.appendChild(this.wrappedCardElement);
+      
+      // Add click/touch interception directly to the wrapped card
+      this.interceptWrappedCardEvents();
     }
     
     this.addEventListeners();
@@ -227,7 +219,6 @@ class ToggleConfirmationCard extends HTMLElement {
   addEventListeners() {
     const cancelBtn = this.shadowRoot.querySelector('.cancel-button');
     const confirmBtn = this.shadowRoot.querySelector('.confirm-button');
-    const overlay = this.shadowRoot.querySelector('#interaction-overlay');
     
     if (cancelBtn) {
       cancelBtn.addEventListener('click', (e) => this.handleCancel(e));
@@ -236,27 +227,29 @@ class ToggleConfirmationCard extends HTMLElement {
     if (confirmBtn) {
       confirmBtn.addEventListener('click', (e) => this.handleConfirm(e));
     }
+  }
+  
+  interceptWrappedCardEvents() {
+    if (!this.wrappedCardElement) return;
     
-    if (overlay) {
-      // Handle click/tap on the overlay which sits above the card
-      overlay.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.handleCardClick(e);
-      });
-      
-      // Handle touch events for mobile
-      overlay.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      
-      overlay.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.handleCardClick(e);
-      });
-    }
+    // Intercept click events (desktop and mobile)
+    this.wrappedCardElement.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleCardClick(e);
+    }, true); // Use capture phase
+    
+    // Intercept touch events specifically for mobile
+    this.wrappedCardElement.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handleCardClick(e);
+    }, true);
+    
+    // Don't prevent touchstart to allow hover effects to work on mobile
+    this.wrappedCardElement.addEventListener('touchstart', (e) => {
+      // Let touchstart pass through for hover effects
+    }, true);
   }
 
   handleCardClick(e) {
