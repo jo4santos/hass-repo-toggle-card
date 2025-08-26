@@ -9,14 +9,44 @@ class ToggleConfirmationCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error('You need to define an entity');
+    if (!config.card && !config.entity) {
+      throw new Error('You need to define either a card configuration or an entity');
     }
     this.config = config;
+    
+    // If card is defined, create the wrapped card
+    if (config.card) {
+      this.createWrappedCard();
+    }
+  }
+  
+  createWrappedCard() {
+    if (this.wrappedCardElement) {
+      this.wrappedCardElement.remove();
+    }
+    
+    const cardConfig = this.config.card;
+    const cardType = cardConfig.type;
+    
+    // Create the card element
+    const cardElement = document.createElement(cardType);
+    
+    // Set config if the card supports it
+    if (cardElement.setConfig) {
+      cardElement.setConfig(cardConfig);
+    }
+    
+    this.wrappedCardElement = cardElement;
   }
 
   set hass(hass) {
     this._hass = hass;
+    
+    // Pass hass to wrapped card
+    if (this.wrappedCardElement && this.wrappedCardElement.hass !== undefined) {
+      this.wrappedCardElement.hass = hass;
+    }
+    
     this.render();
   }
 
@@ -25,12 +55,73 @@ class ToggleConfirmationCard extends HTMLElement {
       return;
     }
 
+    const confirmationText = this.config.confirmation?.text || 'Are you sure?';
+    const cardHeight = this.config.height || '120px';
+
+    // Wrapper mode - show wrapped card or confirmation
+    if (this.config.card) {
+      return this.renderWrapperMode(confirmationText, cardHeight);
+    }
+    
+    // Legacy mode - original entity-based card
+    return this.renderLegacyMode(confirmationText, cardHeight);
+  }
+  
+  renderWrapperMode(confirmationText, cardHeight) {
+    if (this.showingConfirmation) {
+      this.renderConfirmationButtons(confirmationText, cardHeight);
+    } else {
+      // Show the wrapped card with click listener overlay
+      this.shadowRoot.innerHTML = `
+        <style>
+          .wrapper-container {
+            position: relative;
+            cursor: pointer;
+            transition: 0.3s ease-out;
+          }
+          
+          .wrapper-container:hover {
+            transform: translateY(-1px);
+          }
+          
+          .click-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1;
+            background: transparent;
+          }
+          
+          .wrapped-card {
+            pointer-events: none;
+          }
+        </style>
+        
+        <div class="wrapper-container" id="wrapper-container">
+          <div class="click-overlay" id="click-overlay"></div>
+          <div class="wrapped-card" id="wrapped-card"></div>
+        </div>
+      `;
+      
+      // Insert the wrapped card
+      const wrappedCardContainer = this.shadowRoot.querySelector('#wrapped-card');
+      if (this.wrappedCardElement && wrappedCardContainer) {
+        wrappedCardContainer.appendChild(this.wrappedCardElement);
+        this.wrappedCardElement.style.pointerEvents = 'none';
+      }
+    }
+    
+    this.addEventListeners();
+  }
+  
+  renderLegacyMode(confirmationText, cardHeight) {
     const entityId = this.config.entity;
     const entity = this._hass.states[entityId];
     const name = this.config.name || (entity ? entity.attributes.friendly_name : entityId);
     const icon = this.config.icon || (entity ? entity.attributes.icon : 'mdi:help');
     const color = this.config.color || 'blue';
-    const confirmationText = this.config.confirmation?.text || 'Are you sure?';
     
     // Determine icon color based on state
     const state = entity ? entity.state : 'unavailable';
@@ -48,135 +139,11 @@ class ToggleConfirmationCard extends HTMLElement {
         hour: '2-digit',
         minute: '2-digit'
       }) : (entity ? `Debug: ${Object.keys(entity).join(', ')}` : 'No entity');
-    
-    // Calculate consistent card height
-    const cardHeight = this.config.height || '120px';
 
     if (this.showingConfirmation) {
-      this.shadowRoot.innerHTML = `
-        <style>
-          .confirmation-container {
-            display: flex;
-            flex-direction: column;
-            height: ${cardHeight};
-            border-radius: var(--ha-card-border-radius, 12px);
-            border-width: var(--ha-card-border-width, 1px);
-            border-style: solid;
-            border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
-            color: var(--primary-text-color);
-            transition: 0.3s ease-out;
-            position: relative;
-            overflow: hidden;
-          }
-          
-          .confirmation-text {
-            background: var(--card-background-color, white);
-            padding: 16px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--primary-text-color);
-            border-bottom: 1px solid var(--divider-color, #e0e0e0);
-            flex-shrink: 0;
-          }
-          
-          .buttons-container {
-            display: flex;
-            flex: 1;
-          }
-          
-          .timer-display {
-            position: absolute;
-            bottom: 8px;
-            right: 12px;
-            font-size: 11px;
-            opacity: 0.6;
-            color: var(--secondary-text-color);
-          }
-          
-          .confirm-button, .cancel-button {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            color: white;
-            transition: all 0.2s ease;
-            padding: 12px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-          }
-          
-          .confirm-button {
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-          }
-          
-          .confirm-button:hover {
-            background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
-            transform: translateY(-1px);
-          }
-          
-          .cancel-button {
-            background: linear-gradient(135deg, #f44336 0%, #da190b 100%);
-          }
-          
-          .cancel-button:hover {
-            background: linear-gradient(135deg, #da190b 0%, #c1150a 100%);
-            transform: translateY(-1px);
-          }
-          
-          .button-icon {
-            font-size: 24px;
-            margin-bottom: 8px;
-          }
-          
-          .button-text {
-            font-size: 14px;
-            opacity: 0.9;
-          }
-          
-          .confirm-button:active, .cancel-button:active {
-            transform: translateY(0);
-          }
-          
-          .ripple {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(0);
-            animation: ripple-animation 0.6s linear;
-            pointer-events: none;
-          }
-          
-          @keyframes ripple-animation {
-            to {
-              transform: scale(2);
-              opacity: 0;
-            }
-          }
-        </style>
-        
-        <div class="confirmation-container">
-          <div class="confirmation-text">${confirmationText}</div>
-          <div class="buttons-container">
-            <button class="cancel-button" @click="${this.handleCancel}">
-              <div class="button-icon">✕</div>
-              <div class="button-text">Cancelar</div>
-            </button>
-            <button class="confirm-button" @click="${this.handleConfirm}">
-              <div class="button-icon">✓</div>
-              <div class="button-text">Confirmar</div>
-            </button>
-          </div>
-          <div class="timer-display">${this.timeRemaining}s</div>
-        </div>
-      `;
+      this.renderConfirmationButtons(confirmationText, cardHeight);
     } else {
+      // Original entity card
       this.shadowRoot.innerHTML = `
         <style>
           .card {
@@ -264,9 +231,137 @@ class ToggleConfirmationCard extends HTMLElement {
         </div>
       `;
     }
-
+    
     this.addEventListeners();
     this.updateIcon();
+  }
+  
+  renderConfirmationButtons(confirmationText, cardHeight) {
+    this.shadowRoot.innerHTML = `
+      <style>
+        .confirmation-container {
+          display: flex;
+          flex-direction: column;
+          height: ${cardHeight};
+          border-radius: var(--ha-card-border-radius, 12px);
+          border-width: var(--ha-card-border-width, 1px);
+          border-style: solid;
+          border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
+          color: var(--primary-text-color);
+          transition: 0.3s ease-out;
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .confirmation-text {
+          background: var(--card-background-color, white);
+          padding: 16px;
+          text-align: center;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--primary-text-color);
+          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+          flex-shrink: 0;
+        }
+        
+        .buttons-container {
+          display: flex;
+          flex: 1;
+        }
+        
+        .timer-display {
+          position: absolute;
+          bottom: 8px;
+          right: 12px;
+          font-size: 11px;
+          opacity: 0.6;
+          color: var(--secondary-text-color);
+        }
+        
+        .confirm-button, .cancel-button {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          cursor: pointer;
+          font-size: 16px;
+          font-weight: 600;
+          color: white;
+          transition: all 0.2s ease;
+          padding: 12px;
+          text-align: center;
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .confirm-button {
+          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+        
+        .confirm-button:hover {
+          background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+          transform: translateY(-1px);
+        }
+        
+        .cancel-button {
+          background: linear-gradient(135deg, #f44336 0%, #da190b 100%);
+        }
+        
+        .cancel-button:hover {
+          background: linear-gradient(135deg, #da190b 0%, #c1150a 100%);
+          transform: translateY(-1px);
+        }
+        
+        .button-icon {
+          font-size: 24px;
+          margin-bottom: 8px;
+        }
+        
+        .button-text {
+          font-size: 14px;
+          opacity: 0.9;
+        }
+        
+        .confirm-button:active, .cancel-button:active {
+          transform: translateY(0);
+        }
+        
+        .ripple {
+          position: absolute;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.3);
+          transform: scale(0);
+          animation: ripple-animation 0.6s linear;
+          pointer-events: none;
+        }
+        
+        @keyframes ripple-animation {
+          to {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+      </style>
+      
+      <div class="confirmation-container">
+        <div class="confirmation-text">${confirmationText}</div>
+        <div class="buttons-container">
+          <button class="cancel-button" @click="${this.handleCancel}">
+            <div class="button-icon">✕</div>
+            <div class="button-text">Cancelar</div>
+          </button>
+          <button class="confirm-button" @click="${this.handleConfirm}">
+            <div class="button-icon">✓</div>
+            <div class="button-text">Confirmar</div>
+          </button>
+        </div>
+        <div class="timer-display">${this.timeRemaining}s</div>
+      </div>
+    `;
+    
+    this.addEventListeners();
   }
 
   updateIcon() {
@@ -297,6 +392,7 @@ class ToggleConfirmationCard extends HTMLElement {
     const cancelBtn = this.shadowRoot.querySelector('.cancel-button');
     const confirmBtn = this.shadowRoot.querySelector('.confirm-button');
     const card = this.shadowRoot.querySelector('.card');
+    const clickOverlay = this.shadowRoot.querySelector('#click-overlay');
     
     if (cancelBtn) {
       cancelBtn.addEventListener('click', (e) => this.handleCancel(e));
@@ -308,6 +404,10 @@ class ToggleConfirmationCard extends HTMLElement {
     
     if (card) {
       card.addEventListener('click', (e) => this.handleCardClick(e));
+    }
+    
+    if (clickOverlay) {
+      clickOverlay.addEventListener('click', (e) => this.handleCardClick(e));
     }
   }
 
@@ -330,12 +430,56 @@ class ToggleConfirmationCard extends HTMLElement {
     this.clearResetTimer();
     this.showingConfirmation = false;
     
-    // Execute the toggle action
-    this._hass.callService('homeassistant', 'toggle', {
-      entity_id: this.config.entity
-    });
+    // Execute the configured action
+    this.executeAction();
     
     this.render();
+  }
+  
+  executeAction() {
+    const action = this.config.action;
+    
+    if (action) {
+      // Custom action configuration
+      switch (action.action) {
+        case 'call-service':
+          this._hass.callService(action.service_domain, action.service, action.service_data || {});
+          break;
+        case 'toggle':
+          if (action.entity) {
+            this._hass.callService('homeassistant', 'toggle', {
+              entity_id: action.entity
+            });
+          }
+          break;
+        case 'navigate':
+          if (action.navigation_path) {
+            window.history.pushState(null, '', action.navigation_path);
+            window.dispatchEvent(new CustomEvent('location-changed'));
+          }
+          break;
+        case 'url':
+          if (action.url_path) {
+            window.open(action.url_path, action.new_tab ? '_blank' : '_self');
+          }
+          break;
+        case 'more-info':
+          if (action.entity) {
+            const event = new CustomEvent('hass-more-info', {
+              detail: { entityId: action.entity },
+              bubbles: true,
+              composed: true
+            });
+            this.dispatchEvent(event);
+          }
+          break;
+      }
+    } else if (this.config.entity) {
+      // Legacy mode - default toggle action
+      this._hass.callService('homeassistant', 'toggle', {
+        entity_id: this.config.entity
+      });
+    }
   }
 
   createRipple(e) {
@@ -408,12 +552,36 @@ class ToggleConfirmationCard extends HTMLElement {
 
   static getStubConfig() {
     return {
+      // Legacy mode example
       entity: 'cover.portao_grande',
       name: 'Abrir / Fechar',
       icon: 'mdi:garage',
       color: 'red',
       confirmation: {
         text: 'De certeza que quer ativar o portão GRANDE?'
+      },
+      action: {
+        action: 'toggle',
+        entity: 'cover.portao_grande'
+      }
+    };
+  }
+  
+  static getWrapperStubConfig() {
+    return {
+      // Wrapper mode example
+      card: {
+        type: 'tile',
+        entity: 'cover.portao_grande',
+        vertical: true,
+        name: 'Abrir / Fechar'
+      },
+      confirmation: {
+        text: 'De certeza que quer ativar o portão GRANDE?'
+      },
+      action: {
+        action: 'toggle',
+        entity: 'cover.portao_grande'
       }
     };
   }
@@ -426,7 +594,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'toggle-confirmation-card',
   name: 'Toggle Confirmation Card',
-  description: 'Card that transforms into red/green confirmation buttons when clicked',
+  description: 'Wrapper card that adds confirmation buttons to any card, or standalone confirmation card',
   preview: false,
   documentationURL: 'https://github.com/jo4santos/hass-repo/tree/main/cards/toggle_confirmation_card',
 });
@@ -439,41 +607,131 @@ class ToggleConfirmationCardEditor extends HTMLElement {
   }
 
   render() {
+    const isWrapperMode = this.config.card !== undefined;
+    
     this.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <label>Entity (required):</label>
-          <input type="text" .value="${this.config.entity || ''}" @change="${this.entityChanged}" 
-                 placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
-        </div>
-        <div>
-          <label>Name (optional):</label>
-          <input type="text" .value="${this.config.name || ''}" @change="${this.nameChanged}"
-                 placeholder="Abrir / Fechar" style="width: 100%; padding: 8px; margin-top: 4px;">
-        </div>
-        <div>
-          <label>Icon (optional):</label>
-          <input type="text" .value="${this.config.icon || ''}" @change="${this.iconChanged}"
-                 placeholder="mdi:gate" style="width: 100%; padding: 8px; margin-top: 4px;">
-        </div>
-        <div>
-          <label>Color:</label>
-          <select @change="${this.colorChanged}" style="width: 100%; padding: 8px; margin-top: 4px;">
-            <option value="red" ${this.config.color === 'red' ? 'selected' : ''}>Red</option>
-            <option value="green" ${this.config.color === 'green' ? 'selected' : ''}>Green</option>
-            <option value="blue" ${this.config.color === 'blue' ? 'selected' : ''}>Blue</option>
-            <option value="orange" ${this.config.color === 'orange' ? 'selected' : ''}>Orange</option>
+          <label><strong>Mode:</strong></label>
+          <select id="mode-select" style="width: 100%; padding: 8px; margin-top: 4px;">
+            <option value="legacy" ${!isWrapperMode ? 'selected' : ''}>Standalone Card (Legacy)</option>
+            <option value="wrapper" ${isWrapperMode ? 'selected' : ''}>Card Wrapper</option>
           </select>
         </div>
+        
+        ${isWrapperMode ? this.renderWrapperConfig() : this.renderLegacyConfig()}
+        
         <div>
           <label>Confirmation Text:</label>
           <input type="text" .value="${this.config.confirmation?.text || ''}" @change="${this.confirmationChanged}"
                  placeholder="Are you sure?" style="width: 100%; padding: 8px; margin-top: 4px;">
         </div>
+        
+        <div>
+          <label>Action Type:</label>
+          <select id="action-type" style="width: 100%; padding: 8px; margin-top: 4px;">
+            <option value="toggle" ${this.config.action?.action === 'toggle' ? 'selected' : ''}>Toggle Entity</option>
+            <option value="call-service" ${this.config.action?.action === 'call-service' ? 'selected' : ''}>Call Service</option>
+            <option value="navigate" ${this.config.action?.action === 'navigate' ? 'selected' : ''}>Navigate</option>
+            <option value="more-info" ${this.config.action?.action === 'more-info' ? 'selected' : ''}>More Info</option>
+          </select>
+        </div>
+        
+        ${this.renderActionConfig()}
       </div>
     `;
     
     this.addEventListeners();
+  }
+  
+  renderWrapperConfig() {
+    return `
+      <div>
+        <label>Card Configuration (YAML):</label>
+        <textarea id="card-config" rows="6" style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;" 
+                  placeholder="type: tile&#10;entity: cover.portao_grande&#10;vertical: true&#10;name: Abrir / Fechar">${this.config.card ? JSON.stringify(this.config.card, null, 2) : ''}</textarea>
+      </div>
+    `;
+  }
+  
+  renderLegacyConfig() {
+    return `
+      <div>
+        <label>Entity (required):</label>
+        <input type="text" .value="${this.config.entity || ''}" @change="${this.entityChanged}" 
+               placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
+      </div>
+      <div>
+        <label>Name (optional):</label>
+        <input type="text" .value="${this.config.name || ''}" @change="${this.nameChanged}"
+               placeholder="Abrir / Fechar" style="width: 100%; padding: 8px; margin-top: 4px;">
+      </div>
+      <div>
+        <label>Icon (optional):</label>
+        <input type="text" .value="${this.config.icon || ''}" @change="${this.iconChanged}"
+               placeholder="mdi:gate" style="width: 100%; padding: 8px; margin-top: 4px;">
+      </div>
+      <div>
+        <label>Color:</label>
+        <select @change="${this.colorChanged}" style="width: 100%; padding: 8px; margin-top: 4px;">
+          <option value="red" ${this.config.color === 'red' ? 'selected' : ''}>Red</option>
+          <option value="green" ${this.config.color === 'green' ? 'selected' : ''}>Green</option>
+          <option value="blue" ${this.config.color === 'blue' ? 'selected' : ''}>Blue</option>
+          <option value="orange" ${this.config.color === 'orange' ? 'selected' : ''}>Orange</option>
+        </select>
+      </div>
+    `;
+  }
+  
+  renderActionConfig() {
+    const actionType = this.config.action?.action || 'toggle';
+    
+    switch (actionType) {
+      case 'toggle':
+        return `
+          <div>
+            <label>Entity to Toggle:</label>
+            <input type="text" .value="${this.config.action?.entity || this.config.entity || ''}" @change="${this.actionEntityChanged}"
+                   placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
+          </div>
+        `;
+      case 'call-service':
+        return `
+          <div>
+            <label>Service Domain:</label>
+            <input type="text" .value="${this.config.action?.service_domain || ''}" @change="${this.serviceDomainChanged}"
+                   placeholder="homeassistant" style="width: 100%; padding: 8px; margin-top: 4px;">
+          </div>
+          <div>
+            <label>Service:</label>
+            <input type="text" .value="${this.config.action?.service || ''}" @change="${this.serviceChanged}"
+                   placeholder="toggle" style="width: 100%; padding: 8px; margin-top: 4px;">
+          </div>
+          <div>
+            <label>Service Data (JSON):</label>
+            <textarea rows="3" .value="${JSON.stringify(this.config.action?.service_data || {}, null, 2)}" @change="${this.serviceDataChanged}"
+                      placeholder='{"entity_id": "cover.portao_grande"}' style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;"></textarea>
+          </div>
+        `;
+      case 'navigate':
+        return `
+          <div>
+            <label>Navigation Path:</label>
+            <input type="text" .value="${this.config.action?.navigation_path || ''}" @change="${this.navigationPathChanged}"
+                   placeholder="/lovelace/dashboard" style="width: 100%; padding: 8px; margin-top: 4px;">
+          </div>
+        `;
+      case 'more-info':
+        return `
+          <div>
+            <label>Entity:</label>
+            <input type="text" .value="${this.config.action?.entity || ''}" @change="${this.actionEntityChanged}"
+                   placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
+          </div>
+        `;
+      default:
+        return '';
+    }
   }
   
   addEventListeners() {
