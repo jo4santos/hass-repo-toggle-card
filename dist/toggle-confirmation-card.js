@@ -9,18 +9,14 @@ class ToggleConfirmationCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.card && !config.entity) {
-      throw new Error('You need to define either a card configuration or an entity');
+    if (!config.card) {
+      throw new Error('You need to define a card configuration to wrap');
     }
     this.config = config;
-    
-    // If card is defined, create the wrapped card
-    if (config.card) {
-      this.createWrappedCard();
-    }
+    this.createWrappedCard();
   }
   
-  createWrappedCard() {
+  async createWrappedCard() {
     if (this.wrappedCardElement) {
       this.wrappedCardElement.remove();
     }
@@ -28,15 +24,28 @@ class ToggleConfirmationCard extends HTMLElement {
     const cardConfig = this.config.card;
     const cardType = cardConfig.type;
     
-    // Create the card element
-    const cardElement = document.createElement(cardType);
-    
-    // Set config if the card supports it
-    if (cardElement.setConfig) {
-      cardElement.setConfig(cardConfig);
+    // Handle custom card types by waiting for them to be defined
+    if (cardType.includes('custom:')) {
+      const elementName = cardType.replace('custom:', '');
+      if (!customElements.get(elementName)) {
+        console.warn(`Custom card ${elementName} not yet loaded, waiting...`);
+        await customElements.whenDefined(elementName);
+      }
+      this.wrappedCardElement = document.createElement(elementName);
+    } else {
+      // Handle built-in card types
+      const elementName = `hui-${cardType}-card`;
+      this.wrappedCardElement = document.createElement(elementName);
     }
     
-    this.wrappedCardElement = cardElement;
+    // Set config and hass
+    if (this.wrappedCardElement.setConfig) {
+      this.wrappedCardElement.setConfig(cardConfig);
+    }
+    
+    if (this._hass && this.wrappedCardElement.hass !== undefined) {
+      this.wrappedCardElement.hass = this._hass;
+    }
   }
 
   set hass(hass) {
@@ -47,202 +56,90 @@ class ToggleConfirmationCard extends HTMLElement {
       this.wrappedCardElement.hass = hass;
     }
     
-    this.render();
+    // Delay render to ensure wrapped card is ready
+    setTimeout(() => this.render(), 0);
   }
 
   render() {
-    if (!this.config || !this._hass) {
+    if (!this.config || !this._hass || !this.wrappedCardElement) {
       return;
     }
 
     const confirmationText = this.config.confirmation?.text || 'Are you sure?';
-    const cardHeight = this.config.height || '120px';
 
-    // Wrapper mode - show wrapped card or confirmation
-    if (this.config.card) {
-      return this.renderWrapperMode(confirmationText, cardHeight);
+    if (this.showingConfirmation) {
+      this.renderConfirmationButtons(confirmationText);
+    } else {
+      this.renderWrappedCard();
     }
-    
-    // Legacy mode - original entity-based card
-    return this.renderLegacyMode(confirmationText, cardHeight);
   }
   
-  renderWrapperMode(confirmationText, cardHeight) {
-    if (this.showingConfirmation) {
-      this.renderConfirmationButtons(confirmationText, cardHeight);
-    } else {
-      // Show the wrapped card with click listener overlay
-      this.shadowRoot.innerHTML = `
-        <style>
-          .wrapper-container {
-            position: relative;
-            cursor: pointer;
-            transition: 0.3s ease-out;
-          }
-          
-          .wrapper-container:hover {
-            transform: translateY(-1px);
-          }
-          
-          .click-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: 1;
-            background: transparent;
-          }
-          
-          .wrapped-card {
-            pointer-events: none;
-          }
-        </style>
+  renderWrappedCard() {
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          position: relative;
+        }
         
-        <div class="wrapper-container" id="wrapper-container">
-          <div class="click-overlay" id="click-overlay"></div>
-          <div class="wrapped-card" id="wrapped-card"></div>
-        </div>
-      `;
+        .wrapper-container {
+          position: relative;
+          cursor: pointer;
+          transition: 0.3s ease-out;
+        }
+        
+        .wrapper-container:hover {
+          transform: translateY(-1px);
+        }
+        
+        .click-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 1;
+          background: transparent;
+        }
+        
+        .wrapped-card {
+          pointer-events: none;
+          display: block;
+        }
+        
+        .wrapped-card > * {
+          pointer-events: none !important;
+        }
+      </style>
       
-      // Insert the wrapped card
-      const wrappedCardContainer = this.shadowRoot.querySelector('#wrapped-card');
-      if (this.wrappedCardElement && wrappedCardContainer) {
-        wrappedCardContainer.appendChild(this.wrappedCardElement);
-        this.wrappedCardElement.style.pointerEvents = 'none';
+      <div class="wrapper-container" id="wrapper-container">
+        <div class="click-overlay" id="click-overlay"></div>
+        <div class="wrapped-card" id="wrapped-card"></div>
+      </div>
+    `;
+    
+    // Insert the wrapped card
+    const wrappedCardContainer = this.shadowRoot.querySelector('#wrapped-card');
+    if (this.wrappedCardElement && wrappedCardContainer) {
+      // Ensure the card is properly rendered
+      if (this.wrappedCardElement.hass !== this._hass) {
+        this.wrappedCardElement.hass = this._hass;
       }
+      
+      wrappedCardContainer.appendChild(this.wrappedCardElement);
     }
     
     this.addEventListeners();
   }
   
-  renderLegacyMode(confirmationText, cardHeight) {
-    const entityId = this.config.entity;
-    const entity = this._hass.states[entityId];
-    const name = this.config.name || (entity ? entity.attributes.friendly_name : entityId);
-    const icon = this.config.icon || (entity ? entity.attributes.icon : 'mdi:help');
-    const color = this.config.color || 'blue';
-    
-    // Determine icon color based on state
-    const state = entity ? entity.state : 'unavailable';
-    const isOpen = state === 'open';
-    const iconColor = isOpen ? 'var(--red-color, #f44336)' : (color === 'red' ? '#f44336' : color === 'green' ? '#4CAF50' : color);
-    
-    // Format last updated - try both last_updated and last_changed
-    console.log('Entity object:', entity);
-    const lastUpdatedTime = entity && (entity.last_updated || entity.last_changed);
-    const lastUpdated = lastUpdatedTime ? 
-      new Date(lastUpdatedTime).toLocaleString('pt-PT', {
-        day: '2-digit',
-        month: '2-digit', 
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }) : (entity ? `Debug: ${Object.keys(entity).join(', ')}` : 'No entity');
-
-    if (this.showingConfirmation) {
-      this.renderConfirmationButtons(confirmationText, cardHeight);
-    } else {
-      // Original entity card
-      this.shadowRoot.innerHTML = `
-        <style>
-          .card {
-            background: var(--card-background-color, white);
-            border-radius: var(--ha-card-border-radius, 12px);
-            border-width: var(--ha-card-border-width, 1px);
-            border-style: solid;
-            border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
-            color: var(--primary-text-color);
-            padding: 20px;
-            cursor: pointer;
-            transition: 0.3s ease-out;
-            height: ${cardHeight};
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            position: relative;
-            box-sizing: border-box;
-          }
-          
-          .card:hover {
-            transform: translateY(-1px);
-          }
-          
-          .card:active {
-            transform: translateY(0);
-          }
-          
-          .icon-container {
-            margin-bottom: 8px;
-          }
-          
-          .icon, ha-icon.icon {
-            --mdc-icon-size: 24px;
-            width: 24px;
-            height: 24px;
-            display: block;
-          }
-          
-          .name {
-            font-size: 16px;
-            font-weight: 500;
-            color: var(--primary-text-color);
-            margin-bottom: 4px;
-          }
-          
-          .state {
-            font-size: 12px;
-            color: var(--secondary-text-color);
-            opacity: 0.7;
-            margin-bottom: 2px;
-          }
-          
-          .last-updated {
-            font-size: 10px;
-            color: var(--secondary-text-color);
-            opacity: 0.6;
-          }
-          
-          .ripple {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(0, 0, 0, 0.1);
-            transform: scale(0);
-            animation: ripple-animation 0.6s linear;
-            pointer-events: none;
-          }
-          
-          @keyframes ripple-animation {
-            to {
-              transform: scale(2);
-              opacity: 0;
-            }
-          }
-        </style>
-        
-        <div class="card" @click="${this.handleCardClick}">
-          <div class="icon-container" id="icon-container">
-          </div>
-          <div class="name">${name}</div>
-          <div class="state">${state}</div>
-          <div class="last-updated">${lastUpdated}</div>
-        </div>
-      `;
-    }
-    
-    this.addEventListeners();
-    this.updateIcon();
-  }
   
-  renderConfirmationButtons(confirmationText, cardHeight) {
+  renderConfirmationButtons(confirmationText) {
     this.shadowRoot.innerHTML = `
       <style>
         .confirmation-container {
           display: flex;
           flex-direction: column;
-          height: ${cardHeight};
+          min-height: 120px;
           border-radius: var(--ha-card-border-radius, 12px);
           border-width: var(--ha-card-border-width, 1px);
           border-style: solid;
@@ -251,6 +148,7 @@ class ToggleConfirmationCard extends HTMLElement {
           transition: 0.3s ease-out;
           position: relative;
           overflow: hidden;
+          background: var(--card-background-color, white);
         }
         
         .confirmation-text {
@@ -364,34 +262,10 @@ class ToggleConfirmationCard extends HTMLElement {
     this.addEventListeners();
   }
 
-  updateIcon() {
-    if (!this.showingConfirmation) {
-      const iconContainer = this.shadowRoot.querySelector('#icon-container');
-      if (iconContainer) {
-        const entityId = this.config.entity;
-        const entity = this._hass.states[entityId];
-        const icon = this.config.icon || (entity ? entity.attributes.icon : 'mdi:help');
-        const state = entity ? entity.state : 'unavailable';
-        const isOpen = state === 'open';
-        const iconColor = isOpen ? 'var(--red-color, #f44336)' : (this.config.color === 'red' ? '#f44336' : this.config.color === 'green' ? '#4CAF50' : this.config.color || 'blue');
-        
-        // Create ha-icon element
-        const iconElement = document.createElement('ha-icon');
-        iconElement.icon = icon;
-        iconElement.className = 'icon';
-        iconElement.style.color = iconColor;
-        
-        // Clear and append
-        iconContainer.innerHTML = '';
-        iconContainer.appendChild(iconElement);
-      }
-    }
-  }
 
   addEventListeners() {
     const cancelBtn = this.shadowRoot.querySelector('.cancel-button');
     const confirmBtn = this.shadowRoot.querySelector('.confirm-button');
-    const card = this.shadowRoot.querySelector('.card');
     const clickOverlay = this.shadowRoot.querySelector('#click-overlay');
     
     if (cancelBtn) {
@@ -400,10 +274,6 @@ class ToggleConfirmationCard extends HTMLElement {
     
     if (confirmBtn) {
       confirmBtn.addEventListener('click', (e) => this.handleConfirm(e));
-    }
-    
-    if (card) {
-      card.addEventListener('click', (e) => this.handleCardClick(e));
     }
     
     if (clickOverlay) {
@@ -439,46 +309,45 @@ class ToggleConfirmationCard extends HTMLElement {
   executeAction() {
     const action = this.config.action;
     
-    if (action) {
-      // Custom action configuration
-      switch (action.action) {
-        case 'call-service':
-          this._hass.callService(action.service_domain, action.service, action.service_data || {});
-          break;
-        case 'toggle':
-          if (action.entity) {
-            this._hass.callService('homeassistant', 'toggle', {
-              entity_id: action.entity
-            });
-          }
-          break;
-        case 'navigate':
-          if (action.navigation_path) {
-            window.history.pushState(null, '', action.navigation_path);
-            window.dispatchEvent(new CustomEvent('location-changed'));
-          }
-          break;
-        case 'url':
-          if (action.url_path) {
-            window.open(action.url_path, action.new_tab ? '_blank' : '_self');
-          }
-          break;
-        case 'more-info':
-          if (action.entity) {
-            const event = new CustomEvent('hass-more-info', {
-              detail: { entityId: action.entity },
-              bubbles: true,
-              composed: true
-            });
-            this.dispatchEvent(event);
-          }
-          break;
-      }
-    } else if (this.config.entity) {
-      // Legacy mode - default toggle action
-      this._hass.callService('homeassistant', 'toggle', {
-        entity_id: this.config.entity
-      });
+    if (!action) {
+      console.warn('No action configured');
+      return;
+    }
+    
+    switch (action.action) {
+      case 'call-service':
+        this._hass.callService(action.service_domain, action.service, action.service_data || {});
+        break;
+      case 'toggle':
+        if (action.entity) {
+          this._hass.callService('homeassistant', 'toggle', {
+            entity_id: action.entity
+          });
+        }
+        break;
+      case 'navigate':
+        if (action.navigation_path) {
+          window.history.pushState(null, '', action.navigation_path);
+          window.dispatchEvent(new CustomEvent('location-changed'));
+        }
+        break;
+      case 'url':
+        if (action.url_path) {
+          window.open(action.url_path, action.new_tab ? '_blank' : '_self');
+        }
+        break;
+      case 'more-info':
+        if (action.entity) {
+          const event = new CustomEvent('hass-more-info', {
+            detail: { entityId: action.entity },
+            bubbles: true,
+            composed: true
+          });
+          this.dispatchEvent(event);
+        }
+        break;
+      default:
+        console.warn(`Unknown action type: ${action.action}`);
     }
   }
 
@@ -552,24 +421,6 @@ class ToggleConfirmationCard extends HTMLElement {
 
   static getStubConfig() {
     return {
-      // Legacy mode example
-      entity: 'cover.portao_grande',
-      name: 'Abrir / Fechar',
-      icon: 'mdi:garage',
-      color: 'red',
-      confirmation: {
-        text: 'De certeza que quer ativar o portão GRANDE?'
-      },
-      action: {
-        action: 'toggle',
-        entity: 'cover.portao_grande'
-      }
-    };
-  }
-  
-  static getWrapperStubConfig() {
-    return {
-      // Wrapper mode example
       card: {
         type: 'tile',
         entity: 'cover.portao_grande',
@@ -607,19 +458,13 @@ class ToggleConfirmationCardEditor extends HTMLElement {
   }
 
   render() {
-    const isWrapperMode = this.config.card !== undefined;
-    
     this.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <label><strong>Mode:</strong></label>
-          <select id="mode-select" style="width: 100%; padding: 8px; margin-top: 4px;">
-            <option value="legacy" ${!isWrapperMode ? 'selected' : ''}>Standalone Card (Legacy)</option>
-            <option value="wrapper" ${isWrapperMode ? 'selected' : ''}>Card Wrapper</option>
-          </select>
+          <label>Card Configuration (JSON):</label>
+          <textarea id="card-config" rows="6" style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;" 
+                    placeholder='{\n  "type": "tile",\n  "entity": "cover.portao_grande",\n  "vertical": true,\n  "name": "Abrir / Fechar"\n}'>${this.config.card ? JSON.stringify(this.config.card, null, 2) : ''}</textarea>
         </div>
-        
-        ${isWrapperMode ? this.renderWrapperConfig() : this.renderLegacyConfig()}
         
         <div>
           <label>Confirmation Text:</label>
@@ -644,44 +489,6 @@ class ToggleConfirmationCardEditor extends HTMLElement {
     this.addEventListeners();
   }
   
-  renderWrapperConfig() {
-    return `
-      <div>
-        <label>Card Configuration (YAML):</label>
-        <textarea id="card-config" rows="6" style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;" 
-                  placeholder="type: tile&#10;entity: cover.portao_grande&#10;vertical: true&#10;name: Abrir / Fechar">${this.config.card ? JSON.stringify(this.config.card, null, 2) : ''}</textarea>
-      </div>
-    `;
-  }
-  
-  renderLegacyConfig() {
-    return `
-      <div>
-        <label>Entity (required):</label>
-        <input type="text" .value="${this.config.entity || ''}" @change="${this.entityChanged}" 
-               placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
-      </div>
-      <div>
-        <label>Name (optional):</label>
-        <input type="text" .value="${this.config.name || ''}" @change="${this.nameChanged}"
-               placeholder="Abrir / Fechar" style="width: 100%; padding: 8px; margin-top: 4px;">
-      </div>
-      <div>
-        <label>Icon (optional):</label>
-        <input type="text" .value="${this.config.icon || ''}" @change="${this.iconChanged}"
-               placeholder="mdi:gate" style="width: 100%; padding: 8px; margin-top: 4px;">
-      </div>
-      <div>
-        <label>Color:</label>
-        <select @change="${this.colorChanged}" style="width: 100%; padding: 8px; margin-top: 4px;">
-          <option value="red" ${this.config.color === 'red' ? 'selected' : ''}>Red</option>
-          <option value="green" ${this.config.color === 'green' ? 'selected' : ''}>Green</option>
-          <option value="blue" ${this.config.color === 'blue' ? 'selected' : ''}>Blue</option>
-          <option value="orange" ${this.config.color === 'orange' ? 'selected' : ''}>Orange</option>
-        </select>
-      </div>
-    `;
-  }
   
   renderActionConfig() {
     const actionType = this.config.action?.action || 'toggle';
