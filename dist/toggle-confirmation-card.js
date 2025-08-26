@@ -6,6 +6,8 @@ class ToggleConfirmationCard extends HTMLElement {
     this.resetTimer = null;
     this.timeRemaining = 0;
     this.timerInterval = null;
+    // Unique ID for debugging timer issues
+    this.cardId = Math.random().toString(36).substr(2, 9);
   }
 
   setConfig(config) {
@@ -70,6 +72,8 @@ class ToggleConfirmationCard extends HTMLElement {
     if (this.showingConfirmation) {
       this.renderConfirmationButtons(confirmationText);
     } else {
+      // Clear timers when switching back to normal view
+      this.clearResetTimer();
       this.renderWrappedCard();
     }
   }
@@ -321,17 +325,30 @@ class ToggleConfirmationCard extends HTMLElement {
 
 
   startResetTimer() {
+    // Clear any existing timers first to prevent conflicts
+    this.clearResetTimer();
+    
     this.timeRemaining = 10;
     
     this.resetTimer = setTimeout(() => {
-      this.showingConfirmation = false;
-      this.render();
+      if (this.showingConfirmation) { // Check if still in confirmation state
+        this.showingConfirmation = false;
+        this.render();
+      }
     }, 10000);
     
     this.timerInterval = setInterval(() => {
+      if (!this.showingConfirmation) {
+        // If confirmation was cancelled, clear the timer
+        this.clearResetTimer();
+        return;
+      }
+      
       this.timeRemaining--;
       if (this.timeRemaining <= 0) {
         this.clearResetTimer();
+        this.showingConfirmation = false;
+        this.render();
       } else {
         // Update only the timer display
         const timerDisplay = this.shadowRoot.querySelector('.timer-display');
@@ -343,11 +360,11 @@ class ToggleConfirmationCard extends HTMLElement {
   }
   
   clearResetTimer() {
-    if (this.resetTimer) {
+    if (this.resetTimer !== null && this.resetTimer !== undefined) {
       clearTimeout(this.resetTimer);
       this.resetTimer = null;
     }
-    if (this.timerInterval) {
+    if (this.timerInterval !== null && this.timerInterval !== undefined) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
     }
