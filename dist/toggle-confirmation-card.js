@@ -87,16 +87,6 @@ class ToggleConfirmationCard extends HTMLElement {
           cursor: pointer;
         }
         
-        .click-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          z-index: 1;
-          background: transparent;
-        }
-        
         .wrapped-card {
           display: block;
           position: relative;
@@ -104,7 +94,6 @@ class ToggleConfirmationCard extends HTMLElement {
       </style>
       
       <div class="wrapper-container" id="wrapper-container">
-        <div class="click-overlay" id="click-overlay"></div>
         <div class="wrapped-card" id="wrapped-card"></div>
       </div>
     `;
@@ -226,7 +215,7 @@ class ToggleConfirmationCard extends HTMLElement {
   addEventListeners() {
     const cancelBtn = this.shadowRoot.querySelector('.cancel-button');
     const confirmBtn = this.shadowRoot.querySelector('.confirm-button');
-    const clickOverlay = this.shadowRoot.querySelector('#click-overlay');
+    const wrapperContainer = this.shadowRoot.querySelector('#wrapper-container');
     
     if (cancelBtn) {
       cancelBtn.addEventListener('click', (e) => this.handleCancel(e));
@@ -236,8 +225,13 @@ class ToggleConfirmationCard extends HTMLElement {
       confirmBtn.addEventListener('click', (e) => this.handleConfirm(e));
     }
     
-    if (clickOverlay) {
-      clickOverlay.addEventListener('click', (e) => this.handleCardClick(e));
+    if (wrapperContainer) {
+      // Intercept all clicks on the wrapper and its children
+      wrapperContainer.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleCardClick(e);
+      }, true); // Use capture phase to catch clicks before they reach the wrapped card
     }
   }
 
@@ -404,7 +398,7 @@ class ToggleConfirmationCardEditor extends HTMLElement {
         
         <div>
           <label>Confirmation Text:</label>
-          <input type="text" .value="${this.config.confirmation?.text || ''}" @change="${this.confirmationChanged}"
+          <input type="text" value="${this.config.confirmation?.text || ''}"
                  placeholder="Are you sure?" style="width: 100%; padding: 8px; margin-top: 4px;">
         </div>
         
@@ -434,7 +428,7 @@ class ToggleConfirmationCardEditor extends HTMLElement {
         return `
           <div>
             <label>Entity to Toggle:</label>
-            <input type="text" .value="${this.config.action?.entity || this.config.entity || ''}" @change="${this.actionEntityChanged}"
+            <input type="text" value="${this.config.action?.entity || ''}"
                    placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
           </div>
         `;
@@ -442,25 +436,24 @@ class ToggleConfirmationCardEditor extends HTMLElement {
         return `
           <div>
             <label>Service Domain:</label>
-            <input type="text" .value="${this.config.action?.service_domain || ''}" @change="${this.serviceDomainChanged}"
+            <input type="text" value="${this.config.action?.service_domain || ''}"
                    placeholder="homeassistant" style="width: 100%; padding: 8px; margin-top: 4px;">
           </div>
           <div>
             <label>Service:</label>
-            <input type="text" .value="${this.config.action?.service || ''}" @change="${this.serviceChanged}"
+            <input type="text" value="${this.config.action?.service || ''}"
                    placeholder="toggle" style="width: 100%; padding: 8px; margin-top: 4px;">
           </div>
           <div>
             <label>Service Data (JSON):</label>
-            <textarea rows="3" .value="${JSON.stringify(this.config.action?.service_data || {}, null, 2)}" @change="${this.serviceDataChanged}"
-                      placeholder='{"entity_id": "cover.portao_grande"}' style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;"></textarea>
+            <textarea rows="3" placeholder='{"entity_id": "cover.portao_grande"}' style="width: 100%; padding: 8px; margin-top: 4px; font-family: monospace;">${JSON.stringify(this.config.action?.service_data || {}, null, 2)}</textarea>
           </div>
         `;
       case 'navigate':
         return `
           <div>
             <label>Navigation Path:</label>
-            <input type="text" .value="${this.config.action?.navigation_path || ''}" @change="${this.navigationPathChanged}"
+            <input type="text" value="${this.config.action?.navigation_path || ''}"
                    placeholder="/lovelace/dashboard" style="width: 100%; padding: 8px; margin-top: 4px;">
           </div>
         `;
@@ -468,7 +461,7 @@ class ToggleConfirmationCardEditor extends HTMLElement {
         return `
           <div>
             <label>Entity:</label>
-            <input type="text" .value="${this.config.action?.entity || ''}" @change="${this.actionEntityChanged}"
+            <input type="text" value="${this.config.action?.entity || ''}"
                    placeholder="cover.portao_grande" style="width: 100%; padding: 8px; margin-top: 4px;">
           </div>
         `;
@@ -484,8 +477,8 @@ class ToggleConfirmationCardEditor extends HTMLElement {
       cardConfigTextarea.addEventListener('input', (e) => this.cardConfigChanged(e));
     }
     
-    // Confirmation text
-    const confirmationInput = this.querySelector('input[placeholder="Are you sure?"]');
+    // Confirmation text - find input by its position since placeholder might not be unique
+    const confirmationInput = this.querySelectorAll('input[type="text"]')[1]; // Second text input
     if (confirmationInput) {
       confirmationInput.addEventListener('input', (e) => this.confirmationChanged(e));
     }
