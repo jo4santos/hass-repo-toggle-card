@@ -99,6 +99,10 @@ class ToggleConfirmationCard extends HTMLElement {
           height: 100%;
         }
         
+        .wrapped-card > * {
+          height: 100% !important;
+        }
+        
       </style>
       
       <div class="wrapper-container" id="wrapper-container">
@@ -193,10 +197,12 @@ class ToggleConfirmationCard extends HTMLElement {
         
         .confirm-button {
           background: #4CAF50;
+          position: relative;
         }
         
         .cancel-button {
           background: #f44336;
+          position: relative;
         }
         
         .button-icon {
