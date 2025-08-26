@@ -84,6 +84,7 @@ class ToggleConfirmationCard extends HTMLElement {
         :host {
           display: block;
           position: relative;
+          height: auto;
         }
         
         .wrapper-container {
@@ -94,6 +95,8 @@ class ToggleConfirmationCard extends HTMLElement {
         .wrapped-card {
           display: block;
           position: relative;
+          height: auto;
+          min-height: inherit;
         }
         
       </style>
@@ -159,9 +162,13 @@ class ToggleConfirmationCard extends HTMLElement {
           position: absolute;
           bottom: 8px;
           right: 12px;
-          font-size: 11px;
-          opacity: 0.6;
-          color: var(--secondary-text-color);
+          font-size: 12px;
+          font-weight: 600;
+          opacity: 0.9;
+          color: var(--primary-text-color);
+          background: rgba(0, 0, 0, 0.3);
+          padding: 4px 8px;
+          border-radius: 12px;
         }
         
         .confirm-button, .cancel-button {
@@ -330,12 +337,11 @@ class ToggleConfirmationCard extends HTMLElement {
     
     this.timeRemaining = 10;
     
-    this.resetTimer = setTimeout(() => {
-      if (this.showingConfirmation) { // Check if still in confirmation state
-        this.showingConfirmation = false;
-        this.render();
-      }
-    }, 10000);
+    // Update display immediately
+    const timerDisplay = this.shadowRoot.querySelector('.timer-display');
+    if (timerDisplay) {
+      timerDisplay.textContent = `${this.timeRemaining}s`;
+    }
     
     this.timerInterval = setInterval(() => {
       if (!this.showingConfirmation) {
@@ -345,16 +351,17 @@ class ToggleConfirmationCard extends HTMLElement {
       }
       
       this.timeRemaining--;
+      
+      // Update timer display
+      const timerDisplay = this.shadowRoot.querySelector('.timer-display');
+      if (timerDisplay) {
+        timerDisplay.textContent = `${this.timeRemaining}s`;
+      }
+      
       if (this.timeRemaining <= 0) {
         this.clearResetTimer();
         this.showingConfirmation = false;
         this.render();
-      } else {
-        // Update only the timer display
-        const timerDisplay = this.shadowRoot.querySelector('.timer-display');
-        if (timerDisplay) {
-          timerDisplay.textContent = `${this.timeRemaining}s`;
-        }
       }
     }, 1000);
   }
