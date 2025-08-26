@@ -85,11 +85,6 @@ class ToggleConfirmationCard extends HTMLElement {
         .wrapper-container {
           position: relative;
           cursor: pointer;
-          transition: 0.3s ease-out;
-        }
-        
-        .wrapper-container:hover {
-          transform: translateY(-1px);
         }
         
         .click-overlay {
@@ -145,7 +140,6 @@ class ToggleConfirmationCard extends HTMLElement {
           border-style: solid;
           border-color: var(--ha-card-border-color, var(--divider-color, #e0e0e0));
           color: var(--primary-text-color);
-          transition: 0.3s ease-out;
           position: relative;
           overflow: hidden;
           background: var(--card-background-color, white);
@@ -187,7 +181,6 @@ class ToggleConfirmationCard extends HTMLElement {
           font-size: 16px;
           font-weight: 600;
           color: white;
-          transition: all 0.2s ease;
           padding: 12px;
           text-align: center;
           position: relative;
@@ -195,21 +188,11 @@ class ToggleConfirmationCard extends HTMLElement {
         }
         
         .confirm-button {
-          background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-        }
-        
-        .confirm-button:hover {
-          background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
-          transform: translateY(-1px);
+          background: #4CAF50;
         }
         
         .cancel-button {
-          background: linear-gradient(135deg, #f44336 0%, #da190b 100%);
-        }
-        
-        .cancel-button:hover {
-          background: linear-gradient(135deg, #da190b 0%, #c1150a 100%);
-          transform: translateY(-1px);
+          background: #f44336;
         }
         
         .button-icon {
@@ -220,26 +203,6 @@ class ToggleConfirmationCard extends HTMLElement {
         .button-text {
           font-size: 14px;
           opacity: 0.9;
-        }
-        
-        .confirm-button:active, .cancel-button:active {
-          transform: translateY(0);
-        }
-        
-        .ripple {
-          position: absolute;
-          border-radius: 50%;
-          background: rgba(255, 255, 255, 0.3);
-          transform: scale(0);
-          animation: ripple-animation 0.6s linear;
-          pointer-events: none;
-        }
-        
-        @keyframes ripple-animation {
-          to {
-            transform: scale(2);
-            opacity: 0;
-          }
         }
       </style>
       
@@ -282,21 +245,18 @@ class ToggleConfirmationCard extends HTMLElement {
   }
 
   handleCardClick(e) {
-    this.createRipple(e);
     this.showingConfirmation = true;
     this.startResetTimer();
     this.render();
   }
 
   handleCancel(e) {
-    this.createRipple(e);
     this.clearResetTimer();
     this.showingConfirmation = false;
     this.render();
   }
 
   handleConfirm(e) {
-    this.createRipple(e);
     this.clearResetTimer();
     this.showingConfirmation = false;
     
@@ -351,27 +311,6 @@ class ToggleConfirmationCard extends HTMLElement {
     }
   }
 
-  createRipple(e) {
-    const button = e.currentTarget;
-    const rect = button.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height);
-    const x = e.clientX - rect.left - size / 2;
-    const y = e.clientY - rect.top - size / 2;
-    
-    const ripple = document.createElement('div');
-    ripple.className = 'ripple';
-    ripple.style.width = ripple.style.height = size + 'px';
-    ripple.style.left = x + 'px';
-    ripple.style.top = y + 'px';
-    
-    button.appendChild(ripple);
-    
-    setTimeout(() => {
-      if (ripple.parentNode) {
-        ripple.parentNode.removeChild(ripple);
-      }
-    }, 600);
-  }
 
   startResetTimer() {
     this.timeRemaining = 10;
