@@ -32,6 +32,23 @@ class ToggleConfirmationCard extends HTMLElement {
     const color = this.config.color || 'blue';
     const confirmationText = this.config.confirmation?.text || 'Are you sure?';
     
+    // Determine icon color based on state
+    const state = entity ? entity.state : 'unavailable';
+    const isOpen = state === 'open';
+    const iconColor = isOpen ? 'var(--red-color, #f44336)' : (color === 'red' ? '#f44336' : color === 'green' ? '#4CAF50' : color);
+    
+    // Format last updated - try both last_updated and last_changed
+    console.log('Entity object:', entity);
+    const lastUpdatedTime = entity && (entity.last_updated || entity.last_changed);
+    const lastUpdated = lastUpdatedTime ? 
+      new Date(lastUpdatedTime).toLocaleString('pt-PT', {
+        day: '2-digit',
+        month: '2-digit', 
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : (entity ? `Debug: ${Object.keys(entity).join(', ')}` : 'No entity');
+    
     // Calculate consistent card height
     const cardHeight = this.config.height || '120px';
 
@@ -190,23 +207,35 @@ class ToggleConfirmationCard extends HTMLElement {
             transform: translateY(0);
           }
           
-          .icon {
-            --mdc-icon-size: 32px;
-            color: ${color === 'red' ? '#f44336' : color === 'green' ? '#4CAF50' : color};
-            margin-bottom: 12px;
-          }
-          
-          .name {
-            font-size: 18px;
-            font-weight: 500;
-            color: var(--primary-text-color);
+          .icon-container {
             margin-bottom: 8px;
           }
           
+          .icon, ha-icon.icon {
+            --mdc-icon-size: 24px;
+            width: 24px;
+            height: 24px;
+            display: block;
+          }
+          
+          .name {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--primary-text-color);
+            margin-bottom: 4px;
+          }
+          
           .state {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--secondary-text-color);
-            opacity: 0.8;
+            opacity: 0.7;
+            margin-bottom: 2px;
+          }
+          
+          .last-updated {
+            font-size: 10px;
+            color: var(--secondary-text-color);
+            opacity: 0.6;
           }
           
           .ripple {
@@ -227,14 +256,41 @@ class ToggleConfirmationCard extends HTMLElement {
         </style>
         
         <div class="card" @click="${this.handleCardClick}">
-          <ha-icon class="icon" .icon="${icon}"></ha-icon>
+          <div class="icon-container" id="icon-container">
+          </div>
           <div class="name">${name}</div>
-          <div class="state">${entity ? entity.state : 'unavailable'}</div>
+          <div class="state">${state}</div>
+          <div class="last-updated">${lastUpdated}</div>
         </div>
       `;
     }
 
     this.addEventListeners();
+    this.updateIcon();
+  }
+
+  updateIcon() {
+    if (!this.showingConfirmation) {
+      const iconContainer = this.shadowRoot.querySelector('#icon-container');
+      if (iconContainer) {
+        const entityId = this.config.entity;
+        const entity = this._hass.states[entityId];
+        const icon = this.config.icon || (entity ? entity.attributes.icon : 'mdi:help');
+        const state = entity ? entity.state : 'unavailable';
+        const isOpen = state === 'open';
+        const iconColor = isOpen ? 'var(--red-color, #f44336)' : (this.config.color === 'red' ? '#f44336' : this.config.color === 'green' ? '#4CAF50' : this.config.color || 'blue');
+        
+        // Create ha-icon element
+        const iconElement = document.createElement('ha-icon');
+        iconElement.icon = icon;
+        iconElement.className = 'icon';
+        iconElement.style.color = iconColor;
+        
+        // Clear and append
+        iconContainer.innerHTML = '';
+        iconContainer.appendChild(iconElement);
+      }
+    }
   }
 
   addEventListeners() {
