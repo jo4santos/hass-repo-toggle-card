@@ -98,12 +98,8 @@ class ToggleConfirmationCard extends HTMLElement {
         }
         
         .wrapped-card {
-          pointer-events: none;
           display: block;
-        }
-        
-        .wrapped-card > * {
-          pointer-events: none !important;
+          position: relative;
         }
       </style>
       
@@ -121,6 +117,7 @@ class ToggleConfirmationCard extends HTMLElement {
         this.wrappedCardElement.hass = this._hass;
       }
       
+      // Allow card to have normal interactions, clicks will be caught by overlay
       wrappedCardContainer.appendChild(this.wrappedCardElement);
     }
     
@@ -481,30 +478,142 @@ class ToggleConfirmationCardEditor extends HTMLElement {
   }
   
   addEventListeners() {
-    this.querySelector('input[placeholder="cover.portao_grande"]')?.addEventListener('change', (e) => this.entityChanged(e));
-    this.querySelector('input[placeholder="Abrir / Fechar"]')?.addEventListener('change', (e) => this.nameChanged(e));
-    this.querySelector('input[placeholder="mdi:gate"]')?.addEventListener('change', (e) => this.iconChanged(e));
-    this.querySelector('select')?.addEventListener('change', (e) => this.colorChanged(e));
-    this.querySelector('input[placeholder="Are you sure?"]')?.addEventListener('change', (e) => this.confirmationChanged(e));
+    // Card configuration
+    const cardConfigTextarea = this.querySelector('#card-config');
+    if (cardConfigTextarea) {
+      cardConfigTextarea.addEventListener('input', (e) => this.cardConfigChanged(e));
+    }
+    
+    // Confirmation text
+    const confirmationInput = this.querySelector('input[placeholder="Are you sure?"]');
+    if (confirmationInput) {
+      confirmationInput.addEventListener('input', (e) => this.confirmationChanged(e));
+    }
+    
+    // Action type
+    const actionTypeSelect = this.querySelector('#action-type');
+    if (actionTypeSelect) {
+      actionTypeSelect.addEventListener('change', (e) => {
+        this.actionTypeChanged(e);
+        this.render(); // Re-render to show new action fields
+      });
+    }
+    
+    // Action-specific fields
+    this.addActionEventListeners();
+  }
+  
+  addActionEventListeners() {
+    // Entity field for toggle/more-info actions
+    const entityInput = this.querySelector('input[placeholder="cover.portao_grande"]');
+    if (entityInput) {
+      entityInput.addEventListener('input', (e) => this.actionEntityChanged(e));
+    }
+    
+    // Service fields for call-service action
+    const serviceDomainInput = this.querySelector('input[placeholder="homeassistant"]');
+    if (serviceDomainInput) {
+      serviceDomainInput.addEventListener('input', (e) => this.serviceDomainChanged(e));
+    }
+    
+    const serviceInput = this.querySelector('input[placeholder="toggle"]');
+    if (serviceInput) {
+      serviceInput.addEventListener('input', (e) => this.serviceChanged(e));
+    }
+    
+    const serviceDataTextarea = this.querySelector('textarea[placeholder*="entity_id"]');
+    if (serviceDataTextarea) {
+      serviceDataTextarea.addEventListener('input', (e) => this.serviceDataChanged(e));
+    }
+    
+    // Navigation field
+    const navigationInput = this.querySelector('input[placeholder="/lovelace/dashboard"]');
+    if (navigationInput) {
+      navigationInput.addEventListener('input', (e) => this.navigationPathChanged(e));
+    }
   }
 
-  entityChanged(e) {
-    this.config = { ...this.config, entity: e.target.value };
-    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
+  cardConfigChanged(e) {
+    try {
+      const cardConfig = JSON.parse(e.target.value);
+      this.config = { ...this.config, card: cardConfig };
+      this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
+    } catch (error) {
+      // Invalid JSON, don't update config
+      console.warn('Invalid JSON in card configuration');
+    }
   }
-
-  nameChanged(e) {
-    this.config = { ...this.config, name: e.target.value };
+  
+  actionTypeChanged(e) {
+    const actionType = e.target.value;
+    this.config = { 
+      ...this.config, 
+      action: { 
+        ...this.config.action, 
+        action: actionType 
+      } 
+    };
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
   }
   
-  iconChanged(e) {
-    this.config = { ...this.config, icon: e.target.value };
+  actionEntityChanged(e) {
+    this.config = { 
+      ...this.config, 
+      action: { 
+        ...this.config.action, 
+        entity: e.target.value 
+      } 
+    };
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
   }
-
-  colorChanged(e) {
-    this.config = { ...this.config, color: e.target.value };
+  
+  serviceDomainChanged(e) {
+    this.config = { 
+      ...this.config, 
+      action: { 
+        ...this.config.action, 
+        service_domain: e.target.value 
+      } 
+    };
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
+  }
+  
+  serviceChanged(e) {
+    this.config = { 
+      ...this.config, 
+      action: { 
+        ...this.config.action, 
+        service: e.target.value 
+      } 
+    };
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
+  }
+  
+  serviceDataChanged(e) {
+    try {
+      const serviceData = JSON.parse(e.target.value);
+      this.config = { 
+        ...this.config, 
+        action: { 
+          ...this.config.action, 
+          service_data: serviceData 
+        } 
+      };
+      this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
+    } catch (error) {
+      // Invalid JSON, don't update config
+      console.warn('Invalid JSON in service data');
+    }
+  }
+  
+  navigationPathChanged(e) {
+    this.config = { 
+      ...this.config, 
+      action: { 
+        ...this.config.action, 
+        navigation_path: e.target.value 
+      } 
+    };
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this.config } }));
   }
 
