@@ -84,19 +84,19 @@ class ToggleConfirmationCard extends HTMLElement {
         :host {
           display: block;
           position: relative;
-          height: auto;
+          height: 100%;
         }
         
         .wrapper-container {
           position: relative;
           cursor: pointer;
+          height: 100%;
         }
         
         .wrapped-card {
           display: block;
           position: relative;
-          height: auto;
-          min-height: inherit;
+          height: 100%;
         }
         
       </style>
@@ -131,6 +131,7 @@ class ToggleConfirmationCard extends HTMLElement {
         .confirmation-container {
           display: flex;
           flex-direction: column;
+          height: 100%;
           min-height: 120px;
           border-radius: var(--ha-card-border-radius, 12px);
           border-width: var(--ha-card-border-width, 1px);
@@ -160,15 +161,17 @@ class ToggleConfirmationCard extends HTMLElement {
         
         .timer-display {
           position: absolute;
-          bottom: 8px;
-          right: 12px;
-          font-size: 12px;
+          top: 8px;
+          right: 8px;
+          font-size: 10px;
           font-weight: 600;
-          opacity: 0.9;
-          color: var(--primary-text-color);
-          background: rgba(0, 0, 0, 0.3);
-          padding: 4px 8px;
-          border-radius: 12px;
+          opacity: 0.8;
+          color: white;
+          background: rgba(0, 0, 0, 0.4);
+          padding: 2px 6px;
+          border-radius: 8px;
+          min-width: 20px;
+          text-align: center;
         }
         
         .confirm-button, .cancel-button {
@@ -211,6 +214,7 @@ class ToggleConfirmationCard extends HTMLElement {
         <div class="confirmation-text">${confirmationText}</div>
         <div class="buttons-container">
           <button class="cancel-button" @click="${this.handleCancel}">
+            <div class="timer-display">${this.timeRemaining}s</div>
             <div class="button-icon">✕</div>
             <div class="button-text">Cancelar</div>
           </button>
@@ -219,7 +223,6 @@ class ToggleConfirmationCard extends HTMLElement {
             <div class="button-text">Confirmar</div>
           </button>
         </div>
-        <div class="timer-display">${this.timeRemaining}s</div>
       </div>
     `;
     
@@ -338,7 +341,7 @@ class ToggleConfirmationCard extends HTMLElement {
     this.timeRemaining = 10;
     
     // Update display immediately
-    const timerDisplay = this.shadowRoot.querySelector('.timer-display');
+    const timerDisplay = this.shadowRoot.querySelector('.cancel-button .timer-display');
     if (timerDisplay) {
       timerDisplay.textContent = `${this.timeRemaining}s`;
     }
@@ -352,8 +355,8 @@ class ToggleConfirmationCard extends HTMLElement {
       
       this.timeRemaining--;
       
-      // Update timer display
-      const timerDisplay = this.shadowRoot.querySelector('.timer-display');
+      // Update timer display in cancel button
+      const timerDisplay = this.shadowRoot.querySelector('.cancel-button .timer-display');
       if (timerDisplay) {
         timerDisplay.textContent = `${this.timeRemaining}s`;
       }
