@@ -91,10 +91,22 @@ class ToggleConfirmationCard extends HTMLElement {
           display: block;
           position: relative;
         }
+        
+        .interaction-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 999;
+          background: transparent;
+          cursor: pointer;
+        }
       </style>
       
       <div class="wrapper-container" id="wrapper-container">
         <div class="wrapped-card" id="wrapped-card"></div>
+        <div class="interaction-overlay" id="interaction-overlay"></div>
       </div>
     `;
     
@@ -215,7 +227,7 @@ class ToggleConfirmationCard extends HTMLElement {
   addEventListeners() {
     const cancelBtn = this.shadowRoot.querySelector('.cancel-button');
     const confirmBtn = this.shadowRoot.querySelector('.confirm-button');
-    const wrapperContainer = this.shadowRoot.querySelector('#wrapper-container');
+    const overlay = this.shadowRoot.querySelector('#interaction-overlay');
     
     if (cancelBtn) {
       cancelBtn.addEventListener('click', (e) => this.handleCancel(e));
@@ -225,13 +237,25 @@ class ToggleConfirmationCard extends HTMLElement {
       confirmBtn.addEventListener('click', (e) => this.handleConfirm(e));
     }
     
-    if (wrapperContainer) {
-      // Intercept all clicks on the wrapper and its children
-      wrapperContainer.addEventListener('click', (e) => {
+    if (overlay) {
+      // Handle click/tap on the overlay which sits above the card
+      overlay.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         this.handleCardClick(e);
-      }, true); // Use capture phase to catch clicks before they reach the wrapped card
+      });
+      
+      // Handle touch events for mobile
+      overlay.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      
+      overlay.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.handleCardClick(e);
+      });
     }
   }
 
